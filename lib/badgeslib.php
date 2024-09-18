@@ -466,16 +466,27 @@ function badges_prepare_badge_for_external(stdClass $badge, stdClass $user): obj
     // Create a badge instance to be able to get the endorsement and other info.
     $badgeinstance = new badge($badge->id);
     $endorsement   = $badgeinstance->get_endorsement();
-    $alignments    = $badgeinstance->get_alignments();
     $relatedbadges = $badgeinstance->get_related_badges();
+    $alignments    = [];
+    foreach ($badgeinstance->get_alignments() as $alignment) {
+        $alignments[] = (object) [
+            'id' => $alignment->id,
+            'badgeid' => $alignment->badgeid,
+            'targetName' => $alignment->targetname,
+            'targetUrl' => $alignment->targeturl,
+            'targetDescription' => $alignment->targetdescription,
+            'targetFramework' => $alignment->targetframework,
+            'targetCode' => $alignment->targetcode,
+        ];
+    }
 
     if (!$canconfiguredetails) {
         // Return only the properties visible by the user.
         if (!empty($alignments)) {
             foreach ($alignments as $alignment) {
-                unset($alignment->targetdescription);
-                unset($alignment->targetframework);
-                unset($alignment->targetcode);
+                unset($alignment->targetDescription);
+                unset($alignment->targetFramework);
+                unset($alignment->targetCode);
             }
         }
 
@@ -534,8 +545,19 @@ function badges_prepare_badgeclass_for_external(core_badges\output\badgeclass $b
     // Create a badge instance to be able to get the endorsement and other info.
     $badgeinstance = new badge($badgeclass->badge->id);
     $endorsement   = $badgeinstance->get_endorsement();
-    $alignments    = $badgeinstance->get_alignments();
     $relatedbadges = $badgeinstance->get_related_badges();
+    $alignments    = [];
+    foreach ($badgeinstance->get_alignments() as $alignment) {
+        $alignments[] = (object) [
+            'id' => $alignment->id,
+            'badgeid' => $alignment->badgeid,
+            'targetName' => $alignment->targetname,
+            'targetUrl' => $alignment->targeturl,
+            'targetDescription' => $alignment->targetdescription,
+            'targetFramework' => $alignment->targetframework,
+            'targetCode' => $alignment->targetcode,
+        ];
+    }
 
     $canconfiguredetails = has_capability('moodle/badges:configuredetails', $context);
 
@@ -543,9 +565,9 @@ function badges_prepare_badgeclass_for_external(core_badges\output\badgeclass $b
         // Return only the properties visible by the user.
         if (!empty($alignments)) {
             foreach ($alignments as $alignment) {
-                unset($alignment->targetdescription);
-                unset($alignment->targetframework);
-                unset($alignment->targetcode);
+                unset($alignment->targetDescription);
+                unset($alignment->targetFramework);
+                unset($alignment->targetCode);
             }
         }
 
