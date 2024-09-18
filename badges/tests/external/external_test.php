@@ -49,30 +49,23 @@ require_once($CFG->libdir . '/badgeslib.php');
  */
 final class external_test extends externallib_advanced_testcase {
 
-    /** @var stdClass $course */
-    private $course;
-
-    /** @var stdClass $student */
-    private $student;
-
-    /** @var stdClass $teacher */
-    private $teacher;
-
     /**
-     * Set up for every test
+     * Prepare the test.
+     *
+     * @return array
      */
-    public function setUp(): void {
+    private function prepare_test_data(): array {
         global $DB;
-        parent::setUp();
+
         $this->resetAfterTest();
         $this->setAdminUser();
 
         // Setup test data.
-        $this->course = $this->getDataGenerator()->create_course();
+        $course = $this->getDataGenerator()->create_course();
 
         // Create users and enrolments.
-        $this->student = $this->getDataGenerator()->create_and_enrol($this->course, 'student');
-        $this->teacher = $this->getDataGenerator()->create_and_enrol($this->course, 'editingteacher');
+        $student = $this->getDataGenerator()->create_and_enrol($course);
+        $teacher = $this->getDataGenerator()->create_and_enrol($course, 'editingteacher');
 
         // Mock up a site badge.
         $now = time();
@@ -80,15 +73,15 @@ final class external_test extends externallib_advanced_testcase {
         $badge->id = null;
         $badge->name = "Test badge site";
         $badge->description = "Testing badges site";
-        $badge->timecreated = $now - 12;
-        $badge->timemodified = $now - 12;
-        $badge->usercreated = $this->teacher->id;
-        $badge->usermodified = $this->teacher->id;
-        $badge->issuername = "Test issuer";
-        $badge->issuerurl = "http://issuer-url.domain.co.nz";
-        $badge->issuercontact = "issuer@example.com";
-        $badge->expiredate = null;
-        $badge->expireperiod = null;
+        $badge->timecreated = $now;
+        $badge->timemodified = $now;
+        $badge->usercreated = (int) $teacher->id;
+        $badge->usermodified = (int) $teacher->id;
+        $badge->issuername = 'Issuer name';
+        $badge->issuerurl = 'https://example.com/issuer';
+        $badge->issuercontact = 'Issuer contact';
+        $badge->expiredate = $now + YEARSECS;
+        $badge->expireperiod = YEARSECS;
         $badge->type = BADGE_TYPE_SITE;
         $badge->courseid = null;
         $badge->messagesubject = "Test message subject for badge";
@@ -104,11 +97,28 @@ final class external_test extends externallib_advanced_testcase {
         $badge->imagecaption = 'Caption';
 
         $badgeid = $DB->insert_record('badge', $badge, true);
-        $badge = new \badge($badgeid);
-        $badge->issue($this->student->id, true);
+        $badge->id = $badgeid;
+        $sitebadge = new \badge($badgeid);
+        $sitebadge->issue($student->id, true);
+        $siteissuedbadge = $DB->get_record('badge_issued', [ 'badgeid' => $badge->id ]);
 
-        // Hack the database to adjust the time each badge was issued.
-        $DB->set_field('badge_issued', 'dateissued', $now - 11, array('userid' => $this->student->id, 'badgeid' => $badgeid));
+        // Hack the database to adjust the time the badge was issued.
+        $siteissuedbadge->dateissued = $now - 11;
+        $DB->update_record('badge_issued', $siteissuedbadge);
+
+        $badge->nextcron = $sitebadge->nextcron;
+        $badge->issuedid = (int) $siteissuedbadge->id;
+        $badge->uniquehash = $siteissuedbadge->uniquehash;
+        $badge->dateissued = (int) $siteissuedbadge->dateissued;
+        $badge->dateexpire = $siteissuedbadge->dateexpire;
+        $badge->visible = (int) $siteissuedbadge->visible;
+        $context = \context_system::instance();
+        $badge->badgeurl = \moodle_url::make_webservice_pluginfile_url($context->id, 'badges', 'badgeimage', $badge->id, '/',
+                                                                            'f3')->out(false);
+        $badge->status = BADGE_STATUS_ACTIVE_LOCKED;
+        $badge->recipientid = $student->id;
+        $badge->recipientfullname = fullname($student);
+        $badge->email = $student->email;
 
         // Add an endorsement for the badge.
         $endorsement = new \stdClass();
@@ -119,7 +129,8 @@ final class external_test extends externallib_advanced_testcase {
         $endorsement->claimid = 'http://claim-url.domain.co.nz';
         $endorsement->claimcomment = 'Claim comment';
         $endorsement->dateissued = $now;
-        $badge->save_endorsement($endorsement);
+        $endorsement->id = $sitebadge->save_endorsement($endorsement);
+        $badge->endorsement = (array) $endorsement;
 
         // Add 2 alignments.
         $alignment = new \stdClass();
@@ -129,144 +140,260 @@ final class external_test extends externallib_advanced_testcase {
         $alignment->targetdescription = 'A1 target description';
         $alignment->targetframework = 'A1 framework';
         $alignment->targetcode = 'A1 code';
-        $badge->save_alignment($alignment);
+        $alignment->id = $sitebadge->save_alignment($alignment);
+        $badge->alignment[] = [
+            'id' => $alignment->id,
+            'badgeid' => $alignment->badgeid,
+            'targetName' => $alignment->targetname,
+            'targetUrl' => $alignment->targeturl,
+            'targetDescription' => $alignment->targetdescription,
+            'targetFramework' => $alignment->targetframework,
+            'targetCode' => $alignment->targetcode,
+        ];
 
+        $alignment = new \stdClass();
+        $alignment->badgeid = $badgeid;
         $alignment->targetname = 'Alignment 2';
         $alignment->targeturl = 'http://a2-target-url.domain.co.nz';
         $alignment->targetdescription = 'A2 target description';
         $alignment->targetframework = 'A2 framework';
         $alignment->targetcode = 'A2 code';
-        $badge->save_alignment($alignment);
+        $alignment->id = $sitebadge->save_alignment($alignment);
+        $badge->alignment[] = [
+            'id' => $alignment->id,
+            'badgeid' => $alignment->badgeid,
+            'targetName' => $alignment->targetname,
+            'targetUrl' => $alignment->targeturl,
+            'targetDescription' => $alignment->targetdescription,
+            'targetFramework' => $alignment->targetframework,
+            'targetCode' => $alignment->targetcode,
+        ];
+
+        $badge->relatedbadges = [];
+        $usersitebadge = (array) $badge;
 
         // Now a course badge.
+        $badge = new \stdClass();
         $badge->id = null;
         $badge->name = "Test badge course";
         $badge->description = "Testing badges course";
+        $badge->timecreated = $now;
+        $badge->timemodified = $now;
+        $badge->usercreated = (int) $teacher->id;
+        $badge->usermodified = (int) $teacher->id;
+        $badge->issuername = 'Issuer name';
+        $badge->issuerurl = 'https://example.com/issuer';
+        $badge->issuercontact = 'Issuer contact';
+        $badge->expiredate = $now + YEARSECS;
+        $badge->expireperiod = YEARSECS;
         $badge->type = BADGE_TYPE_COURSE;
-        $badge->courseid = $this->course->id;
+        $badge->courseid = (int) $course->id;;
+        $badge->messagesubject = "Test message subject for course badge";
+        $badge->message = "Test message body for course badge";
+        $badge->attachment = 1;
+        $badge->notification = 0;
+        $badge->status = BADGE_STATUS_ACTIVE;
+        $badge->version = '1';
+        $badge->language = 'en';
+        $badge->imageauthorname = 'Image author';
+        $badge->imageauthoremail = 'imageauthor@example.com';
+        $badge->imageauthorurl = 'http://image-author-url.domain.co.nz';
+        $badge->imagecaption = 'Caption';
 
-        $coursebadgeid = $DB->insert_record('badge', $badge, true);
-        $badge = new \badge($coursebadgeid);
-        $badge->issue($this->student->id, true);
+        $badge->id = $DB->insert_record('badge', $badge, true);
+        $coursebadge = new \badge($badge->id);
+        $coursebadge->issue($student->id, true);
+        $courseissuedbadge = $DB->get_record('badge_issued', [ 'badgeid' => $badge->id ]);
 
-        // Hack the database to adjust the time each badge was issued.
-        $DB->set_field('badge_issued', 'dateissued', $now - 10, array('userid' => $this->student->id, 'badgeid' => $coursebadgeid));
+        $badge->nextcron = $coursebadge->nextcron;
+        $badge->issuedid = (int) $courseissuedbadge->id;
+        $badge->uniquehash = $courseissuedbadge->uniquehash;
+        $badge->dateissued = (int) $courseissuedbadge->dateissued;
+        $badge->dateexpire = $courseissuedbadge->dateexpire;
+        $badge->visible = (int) $courseissuedbadge->visible;
+        $context = \context_course::instance($badge->courseid);
+        $badge->badgeurl = \moodle_url::make_webservice_pluginfile_url(
+            $context->id, 'badges', 'badgeimage', $badge->id , '/', 'f3')->out(false);
+        $badge->status = BADGE_STATUS_ACTIVE_LOCKED;
+        $badge->recipientid = $student->id;
+        $badge->recipientfullname = fullname($student);
+        $badge->email = $student->email;
 
+        $badge->alignment = [];
+        $usercoursebadge = (array) $badge;
         // Make the site badge a related badge.
-        $badge->add_related_badges(array($badgeid));
+        $sitebadge->add_related_badges([$badge->id]);
+        $usersitebadge['relatedbadges'][0] = [
+            'id' => (int) $coursebadge->id,
+            'name' => $coursebadge->name,
+            'version' => $coursebadge->version,
+            'language' => $coursebadge->language,
+            'type' => $coursebadge->type,
+        ];
+        $usercoursebadge['relatedbadges'][0] = [
+            'id' => (int) $sitebadge->id,
+            'name' => $sitebadge->name,
+            'version' => $sitebadge->version,
+            'language' => $sitebadge->language,
+            'type' => $sitebadge->type,
+        ];
+        return [
+            'coursebadge' => $usercoursebadge,
+            'sitebadge' => $usersitebadge,
+            'student' => $student,
+            'teacher' => $teacher,
+        ];
+    }
+
+    /**
+     * Asserts that a badge returned by the external function matches the given data.
+     *
+     * @param array $expected Expected badge data.
+     * @param array $actual Actual badge data returned by the external function.
+     * @param bool $isrecipient True if user is the badge recipient.
+     * @param bool $canconfiguredetails True if user has capability "moodle/badges:configuredetails".
+     * @throws \PHPUnit\Framework\ExpectationFailedException
+     */
+    private function assert_badge(array $expected, array $actual, bool $isrecipient, bool $canconfiguredetails): void {
+        $this->assertEquals($expected['id'], $actual['id']);
+        $this->assertEquals($expected['name'], $actual['name']);
+        $this->assertEquals($expected['type'], $actual['type']);
+        $this->assertEquals($expected['description'], $actual['description']);
+        $this->assertEquals($expected['issuername'], $actual['issuername']);
+        $this->assertEquals($expected['issuerurl'], $actual['issuerurl']);
+        $this->assertEquals($expected['issuercontact'], $actual['issuercontact']);
+        $this->assertEquals($expected['uniquehash'], $actual['uniquehash']);
+        $this->assertEquals($expected['dateissued'], $actual['dateissued']);
+        $this->assertEquals($expected['dateexpire'], $actual['dateexpire']);
+        $this->assertEquals($expected['version'], $actual['version']);
+        $this->assertEquals($expected['language'], $actual['language']);
+        $this->assertEquals($expected['imageauthorname'], $actual['imageauthorname']);
+        $this->assertEquals($expected['imageauthoremail'], $actual['imageauthoremail']);
+        $this->assertEquals($expected['imageauthorurl'], $actual['imageauthorurl']);
+        $this->assertEquals($expected['imagecaption'], $actual['imagecaption']);
+        $this->assertEquals($expected['badgeurl'], $actual['badgeurl']);
+        $this->assertEquals($expected['recipientid'], $actual['recipientid']);
+        $this->assertEquals($expected['recipientfullname'], $actual['recipientfullname']);
+        $this->assertEquals($expected['endorsement'] ?? null, $actual['endorsement'] ?? null);
+
+        if ($isrecipient || $canconfiguredetails) {
+            $this->assertTimeCurrent($expected['timecreated']);
+            $this->assertTimeCurrent($expected['timemodified']);
+            $this->assertEquals($expected['usercreated'], $actual['usercreated']);
+            $this->assertEquals($expected['usermodified'], $actual['usermodified']);
+            $this->assertEquals($expected['expiredate'], $actual['expiredate']);
+            $this->assertEquals($expected['expireperiod'], $actual['expireperiod']);
+            $this->assertEquals($expected['courseid'], $actual['courseid']);
+            $this->assertEquals($expected['message'], $actual['message']);
+            $this->assertEquals($expected['messagesubject'], $actual['messagesubject']);
+            $this->assertEquals($expected['attachment'], $actual['attachment']);
+            $this->assertEquals($expected['notification'], $actual['notification']);
+            $this->assertEquals($expected['nextcron'], $actual['nextcron']);
+            $this->assertEquals($expected['status'], $actual['status']);
+            $this->assertEquals($expected['issuedid'], $actual['issuedid']);
+            $this->assertEquals($expected['visible'], $actual['visible']);
+            $this->assertEquals($expected['email'], $actual['email']);
+        } else {
+            $this->assertEquals(0, $actual['timecreated']);
+            $this->assertEquals(0, $actual['timemodified']);
+            $this->assertArrayNotHasKey('usercreated', $actual);
+            $this->assertArrayNotHasKey('usermodified', $actual);
+            $this->assertArrayNotHasKey('expiredate', $actual);
+            $this->assertArrayNotHasKey('expireperiod', $actual);
+            $this->assertArrayNotHasKey('courseid', $actual);
+            $this->assertArrayNotHasKey('message', $actual);
+            $this->assertArrayNotHasKey('messagesubject', $actual);
+            $this->assertEquals(1, $actual['attachment']);
+            $this->assertEquals(1, $actual['notification']);
+            $this->assertArrayNotHasKey('nextcron', $actual);
+            $this->assertEquals(0, $actual['status']);
+            $this->assertArrayNotHasKey('issuedid', $actual);
+            $this->assertEquals(0, $actual['visible']);
+            $this->assertArrayNotHasKey('email', $actual);
+        }
+
+        $alignments = $expected['alignment'];
+        if (!$canconfiguredetails) {
+            foreach ($alignments as $index => $alignment) {
+                $alignments[$index] = [
+                    'id' => $alignment['id'],
+                    'badgeid' => $alignment['badgeid'],
+                    'targetName' => $alignment['targetName'],
+                    'targetUrl' => $alignment['targetUrl'],
+                ];
+            }
+        }
+        $this->assertEquals($alignments, $actual['alignment']);
+
+        $relatedbadges = $expected['relatedbadges'];
+        if (!$canconfiguredetails) {
+            foreach ($relatedbadges as $index => $relatedbadge) {
+                $relatedbadges[$index] = [
+                    'id' => $relatedbadge['id'],
+                    'name' => $relatedbadge['name'],
+                ];
+            }
+        }
+        $this->assertEquals($relatedbadges, $actual['relatedbadges']);
     }
 
     /**
      * Test get user badges.
      * These is a basic test since the badges_get_my_user_badges used by the external function already has unit tests.
+     *
+     * @covers \core_badges_external::get_user_badges
      */
     public function test_get_my_user_badges(): void {
+        $data = $this->prepare_test_data();
 
-        $this->setUser($this->student);
-
-        $badges = (array) badges_get_user_badges($this->student->id);
-        $expectedbadges = array();
-        $coursebadge = null;
-
-        foreach ($badges as $badge) {
-            $context = ($badge->type == BADGE_TYPE_SITE) ? \context_system::instance() : \context_course::instance($badge->courseid);
-            $badge->badgeurl = \moodle_url::make_webservice_pluginfile_url($context->id, 'badges', 'badgeimage', $badge->id, '/',
-                                                                            'f3')->out(false);
-
-            // Get the endorsement, alignments and related badges.
-            $badgeinstance = new \badge($badge->id);
-            $endorsement = $badgeinstance->get_endorsement();
-            $alignments = $badgeinstance->get_alignments();
-            $relatedbadges = $badgeinstance->get_related_badges();
-            $badge->alignment = array();
-            $badge->relatedbadges = array();
-
-            if ($endorsement) {
-                $badge->endorsement = (array) $endorsement;
-            }
-
-            if (!empty($alignments)) {
-                foreach ($alignments as $alignment) {
-                    // Students cannot see some fields of the alignments.
-                    unset($alignment->targetname);
-                    unset($alignment->targeturl);
-                    unset($alignment->targetdescription);
-                    unset($alignment->targetframework);
-                    unset($alignment->targetcode);
-
-                    $badge->alignment[] = (array) $alignment;
-                }
-            }
-
-            if (!empty($relatedbadges)) {
-                foreach ($relatedbadges as $relatedbadge) {
-                    // Students cannot see some fields of the related badges.
-                    unset($relatedbadge->version);
-                    unset($relatedbadge->language);
-                    unset($relatedbadge->type);
-
-                    $badge->relatedbadges[] = (array) $relatedbadge;
-                }
-            }
-
-            // Add recipient.
-            $badge->recipientid = $this->student->id;
-            $badge->recipientfullname = fullname($this->student);
-
-            $expectedbadges[] = (array) $badge;
-            if (isset($badge->courseid)) {
-                // Save the course badge to be able to compare it in our tests.
-                $coursebadge = (array) $badge;
-            }
-        }
-
+        $this->setUser($data['student']);
         $result = core_badges_external::get_user_badges();
         $result = external_api::clean_returnvalue(core_badges_external::get_user_badges_returns(), $result);
-        $this->assertEquals($expectedbadges, $result['badges']);
+        $this->assertCount(2, $result['badges']);
+        $this->assert_badge($data['coursebadge'], $result['badges'][0], true, false);
+        $this->assert_badge($data['sitebadge'], $result['badges'][1], true, false);
 
         // Pagination and filtering.
-        $result = core_badges_external::get_user_badges(0, $this->course->id, 0, 1, '', true);
+        $result = core_badges_external::get_user_badges(0, 0, 0, 1, '', true);
         $result = external_api::clean_returnvalue(core_badges_external::get_user_badges_returns(), $result);
         $this->assertCount(1, $result['badges']);
-        $this->assertEquals($coursebadge, $result['badges'][0]);
+        $this->assert_badge($data['coursebadge'], $result['badges'][0], true, false);
     }
 
     /**
      * Test get user badges.
+     *
+     * @covers \core_badges_external::get_user_badges
      */
     public function test_get_other_user_badges(): void {
+        $data = $this->prepare_test_data();
 
-        $this->setUser($this->teacher);
-
-        $result = core_badges_external::get_user_badges($this->student->id);
+        // User with "moodle/badges:configuredetails" capability.
+        $this->setAdminUser();
+        $result = core_badges_external::get_user_badges($data['student']->id);
         $result = external_api::clean_returnvalue(core_badges_external::get_user_badges_returns(), $result);
-
         $this->assertCount(2, $result['badges']);
+        $this->assert_badge($data['coursebadge'], $result['badges'][0], false, true);
+        $this->assert_badge($data['sitebadge'], $result['badges'][1], false, true);
 
-        // Check that we don't have permissions for view the complete information for site badges.
-        foreach ($result['badges'] as $badge) {
-            if (isset($badge['type']) and $badge['type'] == BADGE_TYPE_COURSE) {
-                $this->assertTrue(isset($badge['message']));
-
-                // Check that we have permissions to see all the data in alignments and related badges.
-                foreach ($badge['alignment'] as $alignment) {
-                    $this->assertTrue(isset($alignment['targetdescription']));
-                }
-
-                foreach ($badge['relatedbadges'] as $relatedbadge) {
-                    $this->assertTrue(isset($relatedbadge['type']));
-                }
-            } else {
-                $this->assertFalse(isset($badge['message']));
-            }
-        }
+        // User without "moodle/badges:configuredetails" capability.
+        $this->setUser($this->getDataGenerator()->create_user());
+        $result = core_badges_external::get_user_badges($data['student']->id);
+        $result = external_api::clean_returnvalue(core_badges_external::get_user_badges_returns(), $result);
+        $this->assertCount(2, $result['badges']);
+        $this->assert_badge($data['coursebadge'], $result['badges'][0], false, false);
+        $this->assert_badge($data['sitebadge'], $result['badges'][1], false, false);
     }
 
     /**
      * Test get_user_badges where issuername contains text to be filtered
+     *
+     * @covers \core_badges_external::get_user_badges
      */
     public function test_get_user_badges_filter_issuername(): void {
         global $DB;
+
+        $data = $this->prepare_test_data();
 
         filter_set_global_state('multilang', TEXTFILTER_ON);
         filter_set_applies_to_strings('multilang', true);
@@ -278,7 +405,7 @@ final class external_test extends externallib_advanced_testcase {
         $DB->set_field('badge', 'issuername', $issuername, ['name' => 'Test badge site']);
 
         // Retrieve student badges.
-        $result = core_badges_external::get_user_badges($this->student->id);
+        $result = core_badges_external::get_user_badges($data['student']->id);
         $result = external_api::clean_returnvalue(core_badges_external::get_user_badges_returns(), $result);
 
         // Site badge will be last, because it has the earlier issued date.

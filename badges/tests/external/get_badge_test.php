@@ -54,6 +54,8 @@ final class get_badge_test extends externallib_advanced_testcase {
         $badge->id = null;
         $badge->name = "Test badge site";
         $badge->description  = "Testing badges site";
+        $badge->issuername   = 'Issuer name';
+        $badge->issuerurl    = 'https://example.com/issuer';
         $badge->timecreated  = $now;
         $badge->timemodified = $now;
         $badge->usercreated  = 2;
@@ -77,8 +79,47 @@ final class get_badge_test extends externallib_advanced_testcase {
         $badgeid   = $DB->insert_record('badge', $badge, true);
         $badge->id = $badgeid;
 
+        $badgeinstance = new \badge($badgeid);
+
+        $alignment = new \stdClass();
+        $alignment->badgeid = $badgeid;
+        $alignment->targetname = 'Alignment 1';
+        $alignment->targeturl = 'http://a1-target-url.domain.co.nz';
+        $alignment->targetdescription = 'A1 target description';
+        $alignment->targetframework = 'A1 framework';
+        $alignment->targetcode = 'A1 code';
+        $alignment->id = $badgeinstance->save_alignment($alignment);
+        $badge->alignment[] = [
+            'id' => $alignment->id,
+            'badgeid' => $alignment->badgeid,
+            'targetName' => $alignment->targetname,
+            'targetUrl' => $alignment->targeturl,
+            'targetDescription' => $alignment->targetdescription,
+            'targetFramework' => $alignment->targetframework,
+            'targetCode' => $alignment->targetcode,
+        ];
+
+        $alignment = new \stdClass();
+        $alignment->badgeid = $badgeid;
+        $alignment->targetname = 'Alignment 2';
+        $alignment->targeturl = 'http://a2-target-url.domain.co.nz';
+        $alignment->targetdescription = 'A2 target description';
+        $alignment->targetframework = 'A2 framework';
+        $alignment->targetcode = 'A2 code';
+        $alignment->id = $badgeinstance->save_alignment($alignment);
+        $badge->alignment[] = [
+            'id' => $alignment->id,
+            'badgeid' => $alignment->badgeid,
+            'targetName' => $alignment->targetname,
+            'targetUrl' => $alignment->targeturl,
+            'targetDescription' => $alignment->targetdescription,
+            'targetFramework' => $alignment->targetframework,
+            'targetCode' => $alignment->targetcode,
+        ];
+
         $context           = \context_system::instance();
-        $badge->badgeurl   = \moodle_url::make_webservice_pluginfile_url(
+        $badge->badgeurl   = new \moodle_url('/badges/badgeclass.php', ['id' => $badge->id]);
+        $badge->imageurl   = \moodle_url::make_webservice_pluginfile_url(
             $context->id,
             'badges',
             'badgeimage',
@@ -115,7 +156,40 @@ final class get_badge_test extends externallib_advanced_testcase {
         // Test with an existing badge.
         $result = get_badge::execute($data['badge']['id']);
         $result = \core_external\external_api::clean_returnvalue(get_badge::execute_returns(), $result);
+        $this->assertEquals('BadgeClass', $result['badge']['type']);
+        $this->assertEquals($data['badge']['badgeurl'], $result['badge']['id']);
+        $this->assertEquals($data['badge']['issuername'], $result['badge']['issuer']);
         $this->assertEquals($data['badge']['name'], $result['badge']['name']);
+        $this->assertEquals($data['badge']['imageurl'], $result['badge']['image']);
+        $this->assertEquals($data['badge']['description'], $result['badge']['description']);
+        $this->assertEquals($data['badge']['issuerurl'], $result['badge']['hostedUrl']);
+        $this->assertEquals($data['badge']['alignment'], $result['badge']['alignment']);
+        $this->assertEmpty($result['warnings']);
+    }
+
+    /**
+     * Test get badge by id with an unprivileged user.
+     * @covers ::execute
+     */
+    public function test_get_badge_with_unprivileged_user(): void {
+        $data = $this->prepare_test_data();
+        foreach ($data['badge']['alignment'] as &$alignment) {
+            unset($alignment['targetDescription']);
+            unset($alignment['targetFramework']);
+            unset($alignment['targetCode']);
+        }
+        $this->setUser($this->getDataGenerator()->create_user());
+
+        $result = get_badge::execute($data['badge']['id']);
+        $result = \core_external\external_api::clean_returnvalue(get_badge::execute_returns(), $result);
+        $this->assertEquals('BadgeClass', $result['badge']['type']);
+        $this->assertEquals($data['badge']['badgeurl'], $result['badge']['id']);
+        $this->assertEquals($data['badge']['issuername'], $result['badge']['issuer']);
+        $this->assertEquals($data['badge']['name'], $result['badge']['name']);
+        $this->assertEquals($data['badge']['imageurl'], $result['badge']['image']);
+        $this->assertEquals($data['badge']['description'], $result['badge']['description']);
+        $this->assertEquals($data['badge']['issuerurl'], $result['badge']['hostedUrl']);
+        $this->assertEquals($data['badge']['alignment'], $result['badge']['alignment']);
         $this->assertEmpty($result['warnings']);
     }
 
