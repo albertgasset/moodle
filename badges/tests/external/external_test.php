@@ -218,6 +218,7 @@ class external_test extends externallib_advanced_testcase {
         $badge->recipientid = $student->id;
         $badge->recipientfullname = fullname($student);
         $badge->email = $student->email;
+        $badge->coursefullname = \core_external\util::format_string($course->fullname, $context);
 
         $badge->alignment = [];
         $usercoursebadge = (array) $badge;
@@ -275,6 +276,7 @@ class external_test extends externallib_advanced_testcase {
         $this->assertEquals($expected['recipientid'], $actual['recipientid']);
         $this->assertEquals($expected['recipientfullname'], $actual['recipientfullname']);
         $this->assertEquals($expected['endorsement'] ?? null, $actual['endorsement'] ?? null);
+        $this->assertEquals($expected['coursefullname'] ?? null, $actual['coursefullname'] ?? null);
 
         if ($isrecipient || $canconfiguredetails) {
             $this->assertTimeCurrent($expected['timecreated']);

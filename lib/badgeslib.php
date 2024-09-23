@@ -452,6 +452,12 @@ function badges_prepare_badge_for_external(stdClass $badge, stdClass $user): obj
         ];
     }
 
+    // Course.
+    if ($badge->type == BADGE_TYPE_COURSE) {
+        $course = get_course($context->instanceid);
+        $badge->coursefullname = \core_external\util::format_string($course->fullname, $context);
+    }
+
     // Recipient (the badge was awarded to this person).
     $badge->recipientid = $user->id;
     if ($user->deleted) {
@@ -542,6 +548,14 @@ function badges_prepare_badgeclass_for_external(core_badges\output\badgeclass $b
         'hostedUrl'     => $badgeclass->badge->issuerurl,
         'image'         => $image,
     ];
+
+    // Course.
+    if ($badgeclass->badge->type == BADGE_TYPE_COURSE) {
+        $course = get_course($badgeclass->badge->courseid);
+        $badge->courseid = $course->id;
+        $badge->coursefullname = \core_external\util::format_string($course->fullname, $context);
+    }
+
     // Create a badge instance to be able to get the endorsement and other info.
     $badgeinstance = new badge($badgeclass->badge->id);
     $endorsement   = $badgeinstance->get_endorsement();
@@ -563,6 +577,8 @@ function badges_prepare_badgeclass_for_external(core_badges\output\badgeclass $b
 
     if (!$canconfiguredetails) {
         // Return only the properties visible by the user.
+        unset($badge->courseid);
+
         if (!empty($alignments)) {
             foreach ($alignments as $alignment) {
                 unset($alignment->targetDescription);
