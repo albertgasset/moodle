@@ -52,6 +52,16 @@ abstract class plugin {
     }
 
     /**
+     * Whether the plugin is enabled for external functions.
+     *
+     * @param context $context The context that the editor is used within.
+     * @return bool
+     */
+    public static function is_enabled_for_external(context $context): bool {
+        return true;
+    }
+
+    /**
      * Get the plugin information for the plugin.
      *
      * @param context $context The context that the editor is used within
