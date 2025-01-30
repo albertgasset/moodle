@@ -203,6 +203,7 @@ final class get_user_badge_by_hash_test extends externallib_advanced_testcase {
         $badge->recipientid = $student2->id;
         $badge->recipientfullname = fullname($student2);
         $badge->email = $student2->email;
+        $badge->coursefullname = \core_external\util::format_string($course->fullname, $context);
 
         $badge->alignment    = [];
         $usercoursebadge = (array) $badge;
@@ -222,6 +223,7 @@ final class get_user_badge_by_hash_test extends externallib_advanced_testcase {
             'language' => $sitebadge->language,
             'type' => $sitebadge->type,
         ];
+
         return [
             'coursebadge' => $usercoursebadge,
             'sitebadge'   => $usersitebadge,
@@ -262,6 +264,7 @@ final class get_user_badge_by_hash_test extends externallib_advanced_testcase {
         $this->assertEquals($expected['recipientid'], $actual['recipientid']);
         $this->assertEquals($expected['recipientfullname'], $actual['recipientfullname']);
         $this->assertEquals($expected['endorsement'] ?? null, $actual['endorsement'] ?? null);
+        $this->assertEquals($expected['coursefullname'] ?? null, $actual['coursefullname'] ?? null);
 
         if ($isrecipient || $canconfiguredetails) {
             $this->assertTimeCurrent($expected['timecreated']);
