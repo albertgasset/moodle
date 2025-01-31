@@ -134,9 +134,12 @@ Feature: Use the TinyMCE editor to upload an h5p package
     And I click on "Allow download" "checkbox"
     And I click on "Embed button" "checkbox"
     And I click on "Copyright button" "checkbox"
+    And I click on "Display options" "link"
+    And I click on "Auto-play in the mobile app" "checkbox"
     And I click on "Insert H5P" "button" in the "Insert H5P content" "dialogue"
     And I wait "1" seconds
     And I click on "Save and display" "button"
+    And ".h5p-placeholder[data-mobileapp-autoplay=true]" "css_element" should exist
     And I switch to "h5pcontent" iframe
     And I switch to "h5p-iframe" class iframe
     And "Reuse" "text" should not exist in the ".h5p-actions" "css_element"
